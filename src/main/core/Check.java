@@ -1,3 +1,5 @@
+package main.core;
+
 /**
  * Created with IntelliJ IDEA.
  */
