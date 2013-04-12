@@ -1,4 +1,8 @@
+package main.core;
+
+import java.util.Arrays;
 import java.util.Random;
+import main.core.utils.*;
 
 /**
  * Created with IntelliJ IDEA.
@@ -12,16 +16,82 @@ public class Qap {
 
     private int instanceSize;   // Instance size of the QAP instance
 
+    boolean firstImproveFlag;   // First_improv version of local search
+
     long bestKnown;  // Best objective function value of QAP instance
     long bestFound;  // Best solution found so far with local search
     long veryBestFound;  // Best solution found so far with local search
 
-    private boolean makeSymmetricFlag = false;  // Convert asymmetric instance into symmetric
+    boolean dSymmetricFlag = false; // If first (d) matrix is symmetric: TRUE
+    boolean fSymmetricFlag = false; // If second (f) matrix is symmetric: TRUE
+    boolean nullDiagonalFlag = false;   // At least one matrix has zero diagonal: TRUE
+    boolean makeSymmetricFlag = false;  // Convert asymmetric instance into symmetric instance: TRUE
+
+    public Qap(int instanceSize, int[][] dMatrix, int[][] fMatrix) {
+        this.instanceSize = instanceSize;
+        this.dMatrix = dMatrix;
+        this.fMatrix = fMatrix;
+        initProgram();
+    }
 
     public static void main(String[] args) {
 
 //        start_timers();             /* start timing routines */
 //        init_program(argc, argv);   /* initialize all important data */
+
+        Qap qap = QapInstanceReader.readQapInstance("aa.dat");
+        System.out.println(qap.instanceSize);
+        System.out.println(Arrays.deepToString(qap.dMatrix));
+        System.out.println(Arrays.deepToString(qap.fMatrix));
+
+        qap.veryBestFound = Long.MAX_VALUE;
+
+        for (int i = 0; i < 100; i++) {
+            qap.solution = qap.generateRandomVector(qap.instanceSize);
+
+            qap.bestFound = qap.computeEvaluationFunction(qap.solution);
+            if (qap.dSymmetricFlag && qap.fSymmetricFlag && qap.nullDiagonalFlag) {
+                qap.best2OptSymmetric(qap.solution);
+            } else if (qap.makeSymmetricFlag) {
+                qap.best2OptSymmetric(qap.solution);
+            } else {
+                qap.best2OptAsymmetric(qap.solution);
+            }
+
+            if (qap.computeEvaluationFunction(qap.solution) != qap.bestFound) {
+                System.out.println("Some error must have occurred in local search routine,\n values do not match");
+            }
+
+            if (qap.bestFound < qap.veryBestFound) {
+                qap.veryBestFound = qap.bestFound;
+            }
+        }
+
+        System.out.println(String.format("best solution best improvement: %1$d", qap.veryBestFound));
+
+        for (int i = 0; i < 100; i++) {
+            qap.solution = qap.generateRandomVector(qap.instanceSize);
+
+            qap.bestFound = qap.computeEvaluationFunction(qap.solution);
+            if (qap.dSymmetricFlag && qap.fSymmetricFlag && qap.nullDiagonalFlag) {
+                qap.first2OptSymmetric(qap.solution);
+            } else if (qap.makeSymmetricFlag) {
+                qap.first2OptSymmetric(qap.solution);
+            } else {
+                qap.first2OptAssymetric(qap.solution);
+            }
+
+            if (qap.computeEvaluationFunction(qap.solution) != qap.bestFound) {
+                System.out.println("Some error must have occurred in local search routine,\n values do not match");
+            }
+
+            if (qap.bestFound < qap.veryBestFound) {
+                qap.veryBestFound = qap.bestFound;
+            }
+        }
+
+        System.out.println(String.format("best solution first improvement: %1$d", qap.veryBestFound));
+
 
     }
 
@@ -62,7 +132,7 @@ public class Qap {
 
     // Prints solution
     public void printSolution(int[] solution) {
-        System.out.println("Assignment:");
+        System.out.println("Assignment: ");
         for (int i : solution) {
             System.out.print(String.format("%d ", i));
         }
@@ -105,7 +175,7 @@ public class Qap {
         int help, j;
         Random random = new Random();
 
-        for(int i = 0; i < size; i++){
+        for (int i = 0; i < size; i++) {
             vector[i] = i;
         }
 
@@ -124,8 +194,8 @@ public class Qap {
         return vector;
     }
 
-    // Swap items at positions pos11 and pos2
-    public void swap(int pos1, int pos2, int[] vector){
+    // Swap items at positions pos1 and pos2
+    public void swap(int pos1, int pos2, int[] vector) {
         int help;
         help = vector[pos1];
         vector[pos1] = vector[pos2];
@@ -133,38 +203,37 @@ public class Qap {
     }
 
     // First improvement 2-opt local search for asymmetric instances
-    public void first2OptAssymetric(int[] vector){
+    public void first2OptAssymetric(int[] vector) {
         boolean improvement = true;
         int u, v;
         int tmp;
-        int[] xVector = new int[instanceSize];  // Random vector to scan neighborhood in random order
 
         System.out.println("First imp, asymmetric case");
 
-        bestFound  = computeEvaluationFunction(vector);
-        xVector = generateRandomVector(instanceSize);
+        bestFound = computeEvaluationFunction(vector);
+        int[] xVector = generateRandomVector(instanceSize); // Random vector to scan neighborhood in random order
         while (improvement) {
             improvement = true;
-            for (int i = 0 ; i < instanceSize; i++) {
+            for (int i = 0; i < instanceSize; i++) {
                 u = xVector[i];
-                for (int j = 0 ; j < instanceSize; j++) {
+                for (int j = 0; j < instanceSize; j++) {
                     v = xVector[j];
-                    if (u == v){
+                    if (u == v) {
                         continue;
                     }
                     tmp = 0;
-                    for (int k = 0; k < instanceSize; k++ ) {
-                        if ( (k != u) && (k != v) ) {
-                            tmp += dMatrix[k][u] * ( fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]] ) +
-                                    dMatrix[k][v] * ( fMatrix[vector[k]][vector[u]] - fMatrix[vector[k]][vector[v]] ) +
-                                    dMatrix[u][k] * ( fMatrix[vector[v]][vector[k]] - fMatrix[vector[u]][vector[k]] ) +
-                                    dMatrix[v][k] * ( fMatrix[vector[u]][vector[k]] - fMatrix[vector[v]][vector[k]] );
+                    for (int k = 0; k < instanceSize; k++) {
+                        if ((k != u) && (k != v)) {
+                            tmp += dMatrix[k][u] * (fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]]) +
+                                    dMatrix[k][v] * (fMatrix[vector[k]][vector[u]] - fMatrix[vector[k]][vector[v]]) +
+                                    dMatrix[u][k] * (fMatrix[vector[v]][vector[k]] - fMatrix[vector[u]][vector[k]]) +
+                                    dMatrix[v][k] * (fMatrix[vector[u]][vector[k]] - fMatrix[vector[v]][vector[k]]);
                         }
                     }
-                    tmp += dMatrix[u][u] * ( fMatrix[vector[v]][vector[v]] - fMatrix[vector[u]][vector[u]] )+
-                            dMatrix[u][v] * ( fMatrix[vector[v]][vector[u]] - fMatrix[vector[u]][vector[v]] )+
-                            dMatrix[v][u] * ( fMatrix[vector[u]][vector[v]] - fMatrix[vector[v]][vector[u]] )+
-                            dMatrix[v][v] * ( fMatrix[vector[u]][vector[u]] - fMatrix[vector[v]][vector[v]] );
+                    tmp += dMatrix[u][u] * (fMatrix[vector[v]][vector[v]] - fMatrix[vector[u]][vector[u]]) +
+                            dMatrix[u][v] * (fMatrix[vector[v]][vector[u]] - fMatrix[vector[u]][vector[v]]) +
+                            dMatrix[v][u] * (fMatrix[vector[u]][vector[v]] - fMatrix[vector[v]][vector[u]]) +
+                            dMatrix[v][v] * (fMatrix[vector[u]][vector[u]] - fMatrix[vector[v]][vector[v]]);
                     if (tmp < 0) {
                         improvement = true;
                         bestFound += tmp;
@@ -174,11 +243,10 @@ public class Qap {
                 }
             }
         }
-        free ( xVector );
     }
 
     // First improvement 2-opt local search for symmetric instances
-    public void first2OptSymmetric(int[] vector){
+    public void first2OptSymmetric(int[] vector) {
         boolean improvement = true;
         int u, v;
         int tmp;
@@ -186,12 +254,12 @@ public class Qap {
         int originalSymmetricFactor;  //2: original symmetric instance, 1: original asymmetric instance
 
         System.out.println("First imp, symmetric case");
-        if (makeSymmetricFlag){
+        if (makeSymmetricFlag) {
             originalSymmetricFactor = 1;  // Compensation because of not dividing matrix by 2
         } else {
             originalSymmetricFactor = 2;
         }
-        bestFound  = computeEvaluationFunction(vector);
+        bestFound = computeEvaluationFunction(vector);
         improvement = true;
         xVector = generateRandomVector(instanceSize);
         while (improvement) {
@@ -200,13 +268,13 @@ public class Qap {
                 u = xVector[i];
                 for (int j = 0; j < instanceSize; j++) {
                     v = xVector[j];
-                    if (u == v){
+                    if (u == v) {
                         continue;
                     }
                     tmp = 0;
                     for (int k = 0; k < instanceSize; k++) {
-                        if ( (k != u) && (k != v) ) {
-                            tmp += ( dMatrix[k][u] - dMatrix[k][v] ) * ( fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]] );
+                        if ((k != u) && (k != v)) {
+                            tmp += (dMatrix[k][u] - dMatrix[k][v]) * (fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]]);
                         }
                     }
                     tmp *= originalSymmetricFactor;
@@ -222,7 +290,7 @@ public class Qap {
     }
 
     // Best improvement 2-opt local search for asymmetric instances
-    public void best2OptAsymmetric(int[] vector){
+    public void best2OptAsymmetric(int[] vector) {
         boolean improvement = true;
         int tmp;
         int originalSymmetricFactor;  //2: original symmetric instance, 1: original asymmetric instance
@@ -236,37 +304,37 @@ public class Qap {
 
         System.out.println("Best imp, asymmetric case");
 
-        if ( makeSymmetricFlag ){
+        if (makeSymmetricFlag) {
             originalSymmetricFactor = 1;
-        }else{
+        } else {
             originalSymmetricFactor = 2;
         }
-        bestFound  = computeEvaluationFunction(vector);
+        bestFound = computeEvaluationFunction(vector);
 
 //        for (int k = 0; k < instanceSize; k++ ) {
 //            moveValues[k] = (int[])(moveValues + instanceSize) + k * instanceSize;
 //        }
-        while ( improvement ) {
+        while (improvement) {
             improvement = false;
             maxDecrease = Long.MAX_VALUE;
-        // In the first local search iteration the full neighborhood has to be evaluated
+            // In the first local search iteration the full neighborhood has to be evaluated
             if (firstItFlag) {
                 firstItFlag = false;
-                for (int u = 0 ; u < instanceSize - 1 ; u++) {
-                    for (int v = u + 1 ; v < instanceSize; v++) {
+                for (int u = 0; u < instanceSize - 1; u++) {
+                    for (int v = u + 1; v < instanceSize; v++) {
                         tmp = 0;
-                        for (int k = 0 ; k < instanceSize; k++ ) {
-                            if ( (k != u) && (k != v) ) {
-                                tmp += dMatrix[k][u] * ( fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]] ) +
-                                        dMatrix[k][v] * ( fMatrix[vector[k]][vector[u]] - fMatrix[vector[k]][vector[v]] ) +
-                                        dMatrix[u][k] * ( fMatrix[vector[v]][vector[k]] - fMatrix[vector[u]][vector[k]] ) +
-                                        dMatrix[v][k] * ( fMatrix[vector[u]][vector[k]] - fMatrix[vector[v]][vector[k]] );
+                        for (int k = 0; k < instanceSize; k++) {
+                            if ((k != u) && (k != v)) {
+                                tmp += dMatrix[k][u] * (fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]]) +
+                                        dMatrix[k][v] * (fMatrix[vector[k]][vector[u]] - fMatrix[vector[k]][vector[v]]) +
+                                        dMatrix[u][k] * (fMatrix[vector[v]][vector[k]] - fMatrix[vector[u]][vector[k]]) +
+                                        dMatrix[v][k] * (fMatrix[vector[u]][vector[k]] - fMatrix[vector[v]][vector[k]]);
                             }
                         }
-                        tmp += dMatrix[u][u] * ( fMatrix[vector[v]][vector[v]] - fMatrix[vector[u]][vector[u]] )+
-                                dMatrix[u][v] * ( fMatrix[vector[v]][vector[u]] - fMatrix[vector[u]][vector[v]] )+
-                                dMatrix[v][u] * ( fMatrix[vector[u]][vector[v]] - fMatrix[vector[v]][vector[u]] )+
-                                dMatrix[v][v] * ( fMatrix[vector[u]][vector[u]] - fMatrix[vector[v]][vector[v]] );
+                        tmp += dMatrix[u][u] * (fMatrix[vector[v]][vector[v]] - fMatrix[vector[u]][vector[u]]) +
+                                dMatrix[u][v] * (fMatrix[vector[v]][vector[u]] - fMatrix[vector[u]][vector[v]]) +
+                                dMatrix[v][u] * (fMatrix[vector[u]][vector[v]] - fMatrix[vector[v]][vector[u]]) +
+                                dMatrix[v][v] * (fMatrix[vector[u]][vector[u]] - fMatrix[vector[v]][vector[v]]);
 //                        moveValues[u][v] = tmp;
                         if (tmp < maxDecrease) {
                             maxDecrease = tmp;
@@ -276,22 +344,22 @@ public class Qap {
                     }
                 }
             } else {
-                for (int u = 0 ; u < instanceSize - 1 ; u++) {
-                    for (int v = u+1 ; v < instanceSize ; v++) {
+                for (int u = 0; u < instanceSize - 1; u++) {
+                    for (int v = u + 1; v < instanceSize; v++) {
                         if (u == r || v == s || u == s || v == r) {
                             tmp = 0;
-                            for (int k = 0 ; k < instanceSize ; k++ ) {
-                                if ( (k != u) && (k != v) ) {
-                                    tmp += dMatrix[k][u] * ( fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]] ) +
-                                            dMatrix[k][v] * ( fMatrix[vector[k]][vector[u]] - fMatrix[vector[k]][vector[v]] ) +
-                                            dMatrix[u][k] * ( fMatrix[vector[v]][vector[k]] - fMatrix[vector[u]][vector[k]] ) +
-                                            dMatrix[v][k] * ( fMatrix[vector[u]][vector[k]] - fMatrix[vector[v]][vector[k]] );
+                            for (int k = 0; k < instanceSize; k++) {
+                                if ((k != u) && (k != v)) {
+                                    tmp += dMatrix[k][u] * (fMatrix[vector[k]][vector[v]] - fMatrix[vector[k]][vector[u]]) +
+                                            dMatrix[k][v] * (fMatrix[vector[k]][vector[u]] - fMatrix[vector[k]][vector[v]]) +
+                                            dMatrix[u][k] * (fMatrix[vector[v]][vector[k]] - fMatrix[vector[u]][vector[k]]) +
+                                            dMatrix[v][k] * (fMatrix[vector[u]][vector[k]] - fMatrix[vector[v]][vector[k]]);
                                 }
                             }
-                            tmp += dMatrix[u][u] * ( fMatrix[vector[v]][vector[v]] - fMatrix[vector[u]][vector[u]] )+
-                                    dMatrix[u][v] * ( fMatrix[vector[v]][vector[u]] - fMatrix[vector[u]][vector[v]] )+
-                                    dMatrix[v][u] * ( fMatrix[vector[u]][vector[v]] - fMatrix[vector[v]][vector[u]] )+
-                                    dMatrix[v][v] * ( fMatrix[vector[u]][vector[u]] - fMatrix[vector[v]][vector[v]] );
+                            tmp += dMatrix[u][u] * (fMatrix[vector[v]][vector[v]] - fMatrix[vector[u]][vector[u]]) +
+                                    dMatrix[u][v] * (fMatrix[vector[v]][vector[u]] - fMatrix[vector[u]][vector[v]]) +
+                                    dMatrix[v][u] * (fMatrix[vector[u]][vector[v]] - fMatrix[vector[v]][vector[u]]) +
+                                    dMatrix[v][v] * (fMatrix[vector[u]][vector[u]] - fMatrix[vector[v]][vector[v]]);
 //                            moveValues[u][v] = tmp;
                             if (tmp < maxDecrease) {
                                 maxDecrease = tmp;
@@ -299,10 +367,10 @@ public class Qap {
                                 schosen = v;
                             }
                         } else { /* Change derived from move_values */
-                            tmp = ( dMatrix[r][u] - dMatrix[r][v] + dMatrix[s][v] - dMatrix[s][u] ) *
-                                    ( fMatrix[vector[s]][vector[u]] - fMatrix[vector[s]][vector[v]] + fMatrix[vector[r]][vector[v]] - fMatrix[vector[r]][vector[u]] )
-                                    + ( dMatrix[u][r] - dMatrix[v][r] + dMatrix[v][s] - dMatrix[u][s] ) *
-                                    ( fMatrix[vector[u]][vector[s]] - fMatrix[vector[v]][vector[s]] + fMatrix[vector[v]][vector[r]] - fMatrix[vector[u]][vector[r]] );
+                            tmp = (dMatrix[r][u] - dMatrix[r][v] + dMatrix[s][v] - dMatrix[s][u]) *
+                                    (fMatrix[vector[s]][vector[u]] - fMatrix[vector[s]][vector[v]] + fMatrix[vector[r]][vector[v]] - fMatrix[vector[r]][vector[u]])
+                                    + (dMatrix[u][r] - dMatrix[v][r] + dMatrix[v][s] - dMatrix[u][s]) *
+                                    (fMatrix[vector[u]][vector[s]] - fMatrix[vector[v]][vector[s]] + fMatrix[vector[v]][vector[r]] - fMatrix[vector[u]][vector[r]]);
 //                            tmp += moveValues[u][v];
 //                            moveValues[u][v] = tmp;
                         }
@@ -314,11 +382,11 @@ public class Qap {
                     }
                 }
             }
-            if ( maxDecrease < 0 ) {      /* Objective function value can be improved */
+            if (maxDecrease < 0) {      /* Objective function value can be improved */
                 assert (rchosen < schosen);
                 improvement = true;
                 bestFound += maxDecrease;
-                swap(rchosen,schosen,vector);
+                swap(rchosen, schosen, vector);
                 r = rchosen;    // Memorize previously done move
                 s = schosen;    // Memorize previously done move
                 System.out.println(String.format("Improvement %d, bestFound %d, exchange %d and %d", maxDecrease, bestFound, rchosen, schosen));
@@ -326,62 +394,34 @@ public class Qap {
         }
     }
 
-    public void best2OptSymmetric(int[] vector){
+    public void best2OptSymmetric(int[] vector) {
 
     }
 
     public void initProgram() {
+        dSymmetricFlag = checkSymmetry(dMatrix, instanceSize);
+        fSymmetricFlag = checkSymmetry(fMatrix, instanceSize);
+        nullDiagonalFlag = checkNullDiagonal(dMatrix, instanceSize);
+        if (!nullDiagonalFlag) {
+            nullDiagonalFlag = checkNullDiagonal(fMatrix, instanceSize);
+        }
 
+        makeSymmetricFlag = (dSymmetricFlag != fSymmetricFlag);
+        if (makeSymmetricFlag && nullDiagonalFlag) {
+            if (!dSymmetricFlag)
+                makeMatrixSymmetric(dMatrix, instanceSize);
+            else if (!fSymmetricFlag)
+                makeMatrixSymmetric(fMatrix, instanceSize);
+            else {
+                System.out.println("One matrix should have been symmetric");
+                System.exit(1);
+            }
+        }
     }
 
-    private void readInstance() {
-        /*
-        try {
-            FileInputStream fileInputStream = new FileInputStream(fileName);
-            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(fileInputStream));
-            String strLine;
-
-            Pattern intPattern = Pattern.compile("\\d+");
-            Matcher matcher;
-
-            // Read file line by line
-            while ((strLine = bufferedReader.readLine()) != null) {
-                // Skip comments
-                if (!strLine.startsWith("c")) {
-                    matcher = intPattern.matcher(strLine);
-                    // Read graph information
-                    if (strLine.startsWith("p")) {
-                        // Number of nodes
-                        if (matcher.find()) {
-                            instanceSize = Integer.parseInt(matcher.group());
-                            adj_mat = new boolean[instanceSize][instanceSize];
-                        }
-                        // Number of edges
-                        if (matcher.find()) {
-                            edgesNum = Integer.parseInt(matcher.group());
-                        }
-                        // Reading edges
-                    } else if (strLine.startsWith("e")) {
-                        int n1, n2;
-                        if (matcher.find()) {
-                            n1 = Integer.parseInt(matcher.group()) - 1;
-                            if (matcher.find()) {
-                                n2 = Integer.parseInt(matcher.group()) - 1;
-                                adj_mat[n1][n2] = true;
-                                adj_mat[n2][n1] = true;
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (FileNotFoundException e) {
-            System.out.println("ERROR: unable to open file");
-            System.exit(1);
-        } catch (IOException e) {
-            System.out.println("ERROR: I/O exception");
-            System.exit(1);
-        }
-        */
+    public double ran01() {
+        //TODO
+        return 0;
     }
 
 
