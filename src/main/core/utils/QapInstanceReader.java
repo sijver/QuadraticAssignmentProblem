@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 public class QapInstanceReader {
 
     public static Qap readQapInstance(String filePath) {
-        int instanceSize = 0;
+        byte instanceSize = 0;
         int[][] dMatrix = null;
         int[][] fMatrix = null;
 
@@ -34,7 +34,7 @@ public class QapInstanceReader {
                 // Read instance size information
                 if (firstLine) {
                     if (matcher.find()) {
-                        instanceSize = Integer.parseInt(matcher.group());
+                        instanceSize = (byte) Integer.parseInt(matcher.group());
                         dMatrix = new int[instanceSize][instanceSize];
                         fMatrix = new int[instanceSize][instanceSize];
                     }
