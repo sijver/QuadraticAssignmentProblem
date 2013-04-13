@@ -1,8 +1,8 @@
 package main.core;
 
-import java.util.Arrays;
-import java.util.Random;
-import main.core.utils.*;
+import main.core.utils.QapInstanceReader;
+
+import java.util.*;
 
 /**
  * Created with IntelliJ IDEA.
@@ -12,9 +12,9 @@ public class Qap {
     int[][] dMatrix; // First matrix read from input file, typically distance matrix
     int[][] fMatrix; // Second matrix read from input file, typically flow matrix
 
-    int[] solution; // Array containing the current solution. If dMatrix is the distance matrix and fMatrix the flow matrix, solution[i] is the item assigned to location i
+    byte[] solution; // Array containing the current solution. If dMatrix is the distance matrix and fMatrix the flow matrix, solution[i] is the item assigned to location i
 
-    private int instanceSize;   // Instance size of the QAP instance
+    private byte instanceSize;   // Instance size of the QAP instance
 
     boolean firstImproveFlag;   // First_improv version of local search
 
@@ -27,7 +27,14 @@ public class Qap {
     boolean nullDiagonalFlag = false;   // At least one matrix has zero diagonal: TRUE
     boolean makeSymmetricFlag = false;  // Convert asymmetric instance into symmetric instance: TRUE
 
-    public Qap(int instanceSize, int[][] dMatrix, int[][] fMatrix) {
+
+    private List<byte[]> allSolutions;
+    private List<SolutionType> solutionTypes;
+    private EnumMap<SolutionType, Double> solutionTypeStatistics;
+    private List<MacroState> collapsedSearchLandscape;
+    private List<MacroStatePre> collapsedSearchLandscapePre;
+
+    public Qap(byte instanceSize, int[][] dMatrix, int[][] fMatrix) {
         this.instanceSize = instanceSize;
         this.dMatrix = dMatrix;
         this.fMatrix = fMatrix;
@@ -40,9 +47,6 @@ public class Qap {
 //        init_program(argc, argv);   /* initialize all important data */
 
         Qap qap = QapInstanceReader.readQapInstance("aa.dat");
-        System.out.println(qap.instanceSize);
-        System.out.println(Arrays.deepToString(qap.dMatrix));
-        System.out.println(Arrays.deepToString(qap.fMatrix));
 
         qap.veryBestFound = Long.MAX_VALUE;
 
@@ -131,9 +135,9 @@ public class Qap {
     }
 
     // Prints solution
-    public void printSolution(int[] solution) {
+    public void printSolution(byte[] solution) {
         System.out.println("Assignment: ");
-        for (int i : solution) {
+        for (byte i : solution) {
             System.out.print(String.format("%d ", i));
         }
         System.out.println();
@@ -151,7 +155,7 @@ public class Qap {
     }
 
     // Computes the objective function value for the QAP
-    public long computeEvaluationFunction(int[] solution) {
+    public long computeEvaluationFunction(byte[] solution) {
         long objectiveFunctionValue = 0;
         for (int i = 0; i < instanceSize; i++) {
             for (int j = 0; j < instanceSize; j++) {
@@ -164,23 +168,23 @@ public class Qap {
                     This is due to the particular way of doing this conversion. */
             objectiveFunctionValue /= 2;
         }
-        System.out.println(String.format("Objective function value = %d", objectiveFunctionValue));
-        System.out.println();
+//        System.out.println(String.format("Objective function value = %d", objectiveFunctionValue));
+//        System.out.println();
         return objectiveFunctionValue;
     }
 
     // Generates a random vector
-    public int[] generateRandomVector(int size) {
-        int[] vector = new int[size];
-        int help, j;
+    public byte[] generateRandomVector(int size) {
+        byte[] vector = new byte[size];
+        byte help, j;
         Random random = new Random();
 
-        for (int i = 0; i < size; i++) {
+        for (byte i = 0; i < size; i++) {
             vector[i] = i;
         }
 
         for (int i = 0; i < size - 1; i++) {
-            j = random.nextInt(size - i);
+            j = (byte) random.nextInt(size - i);
             help = vector[i];
             vector[i] = vector[i + j];
             vector[i + j] = help;
@@ -195,15 +199,15 @@ public class Qap {
     }
 
     // Swap items at positions pos1 and pos2
-    public void swap(int pos1, int pos2, int[] vector) {
-        int help;
+    public void swap(int pos1, int pos2, byte[] vector) {
+        byte help;
         help = vector[pos1];
         vector[pos1] = vector[pos2];
         vector[pos2] = help;
     }
 
     // First improvement 2-opt local search for asymmetric instances
-    public void first2OptAssymetric(int[] vector) {
+    public void first2OptAssymetric(byte[] vector) {
         boolean improvement = true;
         int u, v;
         int tmp;
@@ -211,7 +215,7 @@ public class Qap {
         System.out.println("First imp, asymmetric case");
 
         bestFound = computeEvaluationFunction(vector);
-        int[] xVector = generateRandomVector(instanceSize); // Random vector to scan neighborhood in random order
+        byte[] xVector = generateRandomVector(instanceSize); // Random vector to scan neighborhood in random order
         while (improvement) {
             improvement = true;
             for (int i = 0; i < instanceSize; i++) {
@@ -246,11 +250,11 @@ public class Qap {
     }
 
     // First improvement 2-opt local search for symmetric instances
-    public void first2OptSymmetric(int[] vector) {
+    public void first2OptSymmetric(byte[] vector) {
         boolean improvement = true;
         int u, v;
         int tmp;
-        int[] xVector = new int[instanceSize];  // Scan neighborhood in random order
+        byte[] xVector = new byte[instanceSize];  // Scan neighborhood in random order
         int originalSymmetricFactor;  //2: original symmetric instance, 1: original asymmetric instance
 
         System.out.println("First imp, symmetric case");
@@ -290,7 +294,7 @@ public class Qap {
     }
 
     // Best improvement 2-opt local search for asymmetric instances
-    public void best2OptAsymmetric(int[] vector) {
+    public void best2OptAsymmetric(byte[] vector) {
         boolean improvement = true;
         int tmp;
         int originalSymmetricFactor;  //2: original symmetric instance, 1: original asymmetric instance
@@ -394,7 +398,7 @@ public class Qap {
         }
     }
 
-    public void best2OptSymmetric(int[] vector) {
+    public void best2OptSymmetric(byte[] vector) {
 
     }
 
@@ -425,4 +429,209 @@ public class Qap {
     }
 
 
+    public boolean areNeighbours(byte[] vector1, byte[] vector2) {
+        int changes = 0;
+
+        if (vector1.length != vector2.length) {
+            return false;
+        }
+
+        for (int i = 0; i < vector1.length; i++) {
+            if (vector1[i] != vector2[i]) {
+                changes++;
+                if (changes > 2) {
+                    return false;
+                }
+            }
+        }
+
+        return changes == 2;
+    }
+
+    public void computeAllSolutions() {
+        if (allSolutions == null) {
+            allSolutions = getVectorPermutations(null);
+        }
+    }
+
+    public List<byte[]> getAllSolutions() {
+        return allSolutions;
+    }
+
+    private List<byte[]> getVectorPermutations(List<byte[]> previousList) {
+        if (previousList == null) {
+            previousList = new ArrayList<byte[]>();
+        }
+        List<byte[]> newList = new ArrayList<byte[]>();
+        byte previousLength = 0;
+
+        if (previousList.size() == 0) {
+            newList.add(new byte[]{0});
+        } else {
+            previousLength = (byte) previousList.get(0).length;
+            System.out.println(previousLength);
+            for (byte[] vector : previousList) {
+                for (int j = 0; j < previousLength + 1; j++) {
+                    byte[] newVector = Arrays.copyOf(vector, previousLength + 1);
+
+                    for (int k = previousLength; k > j; k--) {
+                        newVector[k] = newVector[k - 1];
+                    }
+
+                    newVector[j] = previousLength;
+
+                    newList.add(newVector);
+                }
+            }
+        }
+
+        if (previousLength + 1 == instanceSize) {
+            return newList;
+        } else {
+            return getVectorPermutations(newList);
+        }
+    }
+
+    public static List<byte[]> getAllNeighboursOfSolution(byte[] vector) {
+        List<byte[]> neighboursList = new LinkedList<byte[]>();
+
+        for (int i = 0; i < vector.length; i++) {
+            for (int j = i + 1; j < vector.length; j++) {
+                byte[] newVector = Arrays.copyOf(vector, vector.length);
+                byte help = newVector[i];
+                newVector[i] = newVector[j];
+                newVector[j] = help;
+                neighboursList.add(newVector);
+            }
+        }
+
+        return neighboursList;
+    }
+
+    public void computeAllSolutionTypes() {
+        if (solutionTypes == null) {
+            computeAllSolutions();
+            solutionTypes = new LinkedList<SolutionType>();
+
+            collapsedSearchLandscape = new ArrayList<MacroState>();
+            collapsedSearchLandscapePre = new LinkedList<MacroStatePre>();
+
+            for (int i = 0; i < allSolutions.size(); i++) {
+                int down = 0;
+                int up = 0;
+                int side = 0;
+
+                byte[] currentSolution = allSolutions.get(i);
+                long currentSolutionEvaluation = computeEvaluationFunction(currentSolution);
+
+                List<byte[]> currentSolutionNeighbours = getAllNeighboursOfSolution(currentSolution);
+
+                for (byte[] currentSolutionNeighbour : currentSolutionNeighbours) {
+                    long newSolutionEvaluation = computeEvaluationFunction(currentSolutionNeighbour);
+                    if (newSolutionEvaluation < currentSolutionEvaluation) {
+                        down++;
+                    } else if (newSolutionEvaluation == currentSolutionEvaluation) {
+                        side++;
+                        collapsedSearchLandscapePre.add(new MacroStatePre(currentSolutionEvaluation, i, currentSolutionNeighbour));
+                    } else if (newSolutionEvaluation > currentSolutionEvaluation) {
+                        up++;
+                    }
+                }
+
+                if (down == 0 && side == 0) {
+                    solutionTypes.add(SolutionType.SLMIN);
+                } else if (down == 0 && side > 0 && up > 0) {
+                    solutionTypes.add(SolutionType.LMIN);
+                } else if (down == 0 && up == 0) {
+                    solutionTypes.add(SolutionType.IPLAT);
+                    System.out.println(SolutionType.IPLAT);
+                } else if (down > 0 && side > 0 && up > 0) {
+                    solutionTypes.add(SolutionType.LEDGE);
+                } else if (down > 0 && side == 0 && up > 0) {
+                    solutionTypes.add(SolutionType.SLOPE);
+                } else if (down > 0 && side > 0 && up == 0) {
+                    solutionTypes.add(SolutionType.LMAX);
+                } else if (side == 0 && up == 0) {
+                    solutionTypes.add(SolutionType.SLMAX);
+                }
+            }
+        }
+
+        for (MacroStatePre macroStatePre : collapsedSearchLandscapePre) {
+            boolean isNeighbourFind = false;
+            for (MacroState macroState : collapsedSearchLandscape) {
+                if (macroState.getSolutionsEvaluation() == macroStatePre.getSolutionsEvaluation()) {
+                    for (int i = 0; i < macroState.getSolutions().size(); i++) {
+                        if (areNeighbours(allSolutions.get(macroState.getSolutions().get(i)), allSolutions.get(macroStatePre.getSolutionNum())) && !macroState.getSolutions().contains(macroStatePre.getSolutionNum())) {
+                            isNeighbourFind = true;
+                            macroState.addSolutionToMacroState(macroStatePre.getSolutionNum());
+                            break;
+                        }
+                    }
+                }
+                if(macroState.getSolutions().contains(macroStatePre.getSolutionNum())){
+                    isNeighbourFind = true;
+                    break;
+                }
+            }
+            if(!isNeighbourFind){
+                MacroState macroState = new MacroState(macroStatePre.getSolutionsEvaluation());
+                macroState.addSolutionToMacroState(macroStatePre.getSolutionNum());
+                collapsedSearchLandscape.add(macroState);
+            }
+        }
+
+        for(int i = 0; i < collapsedSearchLandscape.size(); i++){
+            for(int j = i + 1; j < collapsedSearchLandscape.size(); j++){
+                if(collapsedSearchLandscape.get(i).getSolutionsEvaluation() == collapsedSearchLandscape.get(j).getSolutionsEvaluation()){
+                    boolean areNeighbours = false;
+
+                    for(int sol1Num : collapsedSearchLandscape.get(i).getSolutions()){
+                        for(int sol2Num : collapsedSearchLandscape.get(j).getSolutions()){
+                            if(areNeighbours(allSolutions.get(sol1Num), allSolutions.get(sol2Num))){
+                                areNeighbours = true;
+                            }
+                        }
+                    }
+
+                    if(areNeighbours){
+                        for(int solNum : collapsedSearchLandscape.get(j).getSolutions()){
+                            collapsedSearchLandscape.get(i).addSolutionToMacroState(solNum);
+                        }
+                        collapsedSearchLandscape.remove(j);
+                        j--;
+                    }
+                }
+            }
+        }
+    }
+
+    public void computeSolutionTypeStatistics() {
+        if (solutionTypeStatistics == null) {
+            computeAllSolutionTypes();
+            solutionTypeStatistics = new EnumMap<SolutionType, Double>(SolutionType.class);
+            for (SolutionType solutionType : SolutionType.values()) {
+                solutionTypeStatistics.put(solutionType, 0.0);
+            }
+            for (SolutionType solutionType : solutionTypes) {
+                solutionTypeStatistics.put(solutionType, solutionTypeStatistics.get(solutionType) + 1);
+            }
+            for (SolutionType solutionType : SolutionType.values()) {
+                solutionTypeStatistics.put(solutionType, solutionTypeStatistics.get(solutionType) / solutionTypes.size() * 100);
+            }
+        }
+    }
+
+    public EnumMap<SolutionType, Double> getSolutionTypeStatistics() {
+        computeSolutionTypeStatistics();
+        return solutionTypeStatistics;
+    }
+
+    public List<MacroState> getCollapsedSearchLandscape() {
+        return collapsedSearchLandscape;
+    }
+
+    public List<MacroStatePre> getCollapsedSearchLandscapePre() {
+        return collapsedSearchLandscapePre;
+    }
 }
